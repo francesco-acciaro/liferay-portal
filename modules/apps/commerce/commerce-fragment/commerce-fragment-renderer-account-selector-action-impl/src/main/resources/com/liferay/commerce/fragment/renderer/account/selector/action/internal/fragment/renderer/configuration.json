@@ -1,0 +1,27 @@
+{
+	"fieldSets": [
+		{
+			"fields": [
+				{
+					"dataType": "string",
+					"defaultValue": "createAccount",
+					"label": "account-selector-action",
+					"name": "actionType",
+					"type": "select",
+					"typeOptions": {
+						"validValues": [
+							{
+								"label": "account-selector-action-create-account",
+								"value": "createAccount"
+							},
+							{
+								"label": "account-selector-action-create-order",
+								"value": "createOrder"
+							}
+						]
+					}
+				}
+			]
+		}
+	]
+}
