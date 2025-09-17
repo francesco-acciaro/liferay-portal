@@ -1,5 +1,0 @@
-Bundle-Name: Liferay Commerce Fragment Renderer Account Selector Action Implementation
-Bundle-SymbolicName: com.liferay.commerce.fragment.renderer.account.selector.action.impl
-Bundle-Version: 1.0.0
-Web-ContextPath: /commerce-fragment-renderer-account-selector-action-impl
--dsannotations-options: inherit

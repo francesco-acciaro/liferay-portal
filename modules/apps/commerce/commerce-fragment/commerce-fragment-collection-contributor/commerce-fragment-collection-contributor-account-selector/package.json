@@ -7,7 +7,7 @@
 		"frontend-js-web": "*"
 	},
 	"main": "js/index.js",
-	"name": "commerce-fragment-renderer-account-selector-action-impl",
+	"name": "commerce-fragment-collection-contributor-account-selector",
 	"scripts": {
 		"build": "node-scripts build",
 		"checkFormat": "node-scripts format --check",
