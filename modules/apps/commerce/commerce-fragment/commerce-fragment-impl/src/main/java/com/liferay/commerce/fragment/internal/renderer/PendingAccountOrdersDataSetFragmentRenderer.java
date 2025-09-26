@@ -184,7 +184,7 @@ public class PendingAccountOrdersDataSetFragmentRenderer
 		catch (Exception exception) {
 			_log.error(exception);
 
-			throw new RuntimeException(exception);
+			throw new IOException(exception);
 		}
 	}
 
