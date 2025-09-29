@@ -25,8 +25,8 @@ const panels = Array.from(
 ).map((value, index) => {
 	return {
 		index,
-		key: value.querySelector('.account-selector-panel-title')?.dataset
-			.accountSelectorKey,
+		key: value.querySelector('.account-selector-panel-drop-zone-container')
+			?.dataset.panelKey,
 		value,
 	};
 });
@@ -35,17 +35,46 @@ if (layoutMode !== 'edit') {
 	Liferay.on('current-account-updated', () => window.location.reload());
 }
 
-handleTitleChange(panels[0]);
-accountSelectorDropdownNextButton.addEventListener('click', () => {
-	const step = Number(accountSelectorDropdownHeader.dataset.step);
+const activePanel = panels.find(
+	(panel) =>
+		panel.key === accountSelectorDropdownHeader.dataset.activePanelKey
+);
 
-	handleNav(step, step + 1);
+if (Liferay.CommerceContext.account && activePanel) {
+	handleTitleChange(panels[activePanel.index]);
+
+	handleNav(panels[activePanel.index].key);
+}
+else {
+	handleTitleChange(panels[0]);
+
+	handleNav(panels[0].key);
+}
+
+accountSelectorDropdownNextButton.addEventListener('click', () => {
+	const activePanel = panels.find(
+		(panel) =>
+			panel.key === accountSelectorDropdownHeader.dataset.activePanelKey
+	);
+
+	if (!activePanel || activePanel.index + 1 > panels.length) {
+		return;
+	}
+
+	handleNav(panels[activePanel.index + 1].key);
 });
 
 accountSelectorDropdownPrevButton.addEventListener('click', () => {
-	const step = Number(accountSelectorDropdownHeader.dataset.step);
+	const activePanel = panels.find(
+		(panel) =>
+			panel.key === accountSelectorDropdownHeader.dataset.activePanelKey
+	);
 
-	handleNav(step, step - 1);
+	if (!activePanel || activePanel.index - 1 < 0) {
+		return;
+	}
+
+	handleNav(panels[activePanel.index - 1].key);
 });
 
 function handleTitleChange(panel) {
@@ -54,25 +83,25 @@ function handleTitleChange(panel) {
 	).dataset.panelTitle;
 }
 
-function handleNav(step, nextStep) {
-	if (nextStep < 0 || nextStep > panels.length - 1) {
+function handleNav(nextPanelKey) {
+	const nextPanel = panels.find((panel) => panel.key === nextPanelKey);
+
+	if (!nextPanel) {
 		return;
 	}
 
-	const panel = panels[nextStep];
-
 	accountSelectorDropdownNextButton.classList.toggle(
 		'invisible',
-		panel.index === panels.length - 1
+		nextPanel.index === panels.length - 1
 	);
 	accountSelectorDropdownPrevButton.classList.toggle(
 		'invisible',
-		panel.index === 0
+		nextPanel.index === 0
 	);
 
-	accountSelectorDropdownHeader.dataset.step = nextStep;
+	accountSelectorDropdownHeader.dataset.activePanelKey = nextPanelKey;
 
-	accountSelectorPanelSlider.style.transform = `translate(-${nextStep * configuration.dropdownWidth}px, 0)`;
+	accountSelectorPanelSlider.style.transform = `translate(-${nextPanel.index * configuration.dropdownWidth}px, 0)`;
 
-	handleTitleChange(panel);
+	handleTitleChange(nextPanel);
 }
