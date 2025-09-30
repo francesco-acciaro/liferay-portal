@@ -19,6 +19,36 @@
 							}
 						]
 					}
+				},
+				{
+					"defaultValue": true,
+					"label": "hide-actions-column",
+					"name": "hideActionsColumn",
+					"type": "checkbox",
+					"typeOptions": {
+						"displayType": "toggle"
+					}
+				},
+				{
+					"dataType": "int",
+					"defaultValue": "20",
+					"label": "page-size",
+					"name": "pageSize",
+					"type": "text",
+					"typeOptions": {
+						"validation": {
+							"type": "number"
+						}
+					}
+				},
+				{
+					"defaultValue": false,
+					"label": "show-pagination",
+					"name": "showPagination",
+					"type": "checkbox",
+					"typeOptions": {
+						"displayType": "toggle"
+					}
 				}
 			]
 		}

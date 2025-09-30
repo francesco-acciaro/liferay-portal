@@ -134,10 +134,16 @@ public class PendingAccountOrdersDataSetFragmentRenderer
 				StringBundler.concat(
 					"/o/headless-commerce-delivery-cart/v1.0/channels/",
 					commerceChannel.getCommerceChannelId(), "/carts"));
+
+			FragmentEntryLink fragmentEntryLink =
+				fragmentRendererContext.getFragmentEntryLink();
+
 			httpServletRequest.setAttribute(
 				"liferay-commerce:account-orders-data-set:displayStyle",
 				_getConfigurationValue(
-					"displayStyle", fragmentRendererContext));
+					"displayStyle", fragmentEntryLink,
+					fragmentRendererContext));
+
 			httpServletRequest.setAttribute(
 				"liferay-commerce:account-orders-data-set:" +
 					"fdsActionDropdownItems",
@@ -147,8 +153,31 @@ public class PendingAccountOrdersDataSetFragmentRenderer
 						_language.get(httpServletRequest, "view"), null, null,
 						"link")));
 			httpServletRequest.setAttribute(
+				"liferay-commerce:account-orders-data-set:hideActionsColumn",
+				GetterUtil.getBoolean(
+					_fragmentEntryConfigurationParser.getFieldValue(
+						getConfigurationJSONObject(fragmentRendererContext),
+						fragmentEntryLink.getEditableValuesJSONObject(),
+						fragmentRendererContext.getLocale(),
+						"hideActionsColumn")));
+			httpServletRequest.setAttribute(
 				"liferay-commerce:account-orders-data-set:namespace",
 				StringUtil.randomId() + StringPool.UNDERLINE);
+			httpServletRequest.setAttribute(
+				"liferay-commerce:account-orders-data-set:pageSize",
+				GetterUtil.getInteger(
+					_fragmentEntryConfigurationParser.getFieldValue(
+						getConfigurationJSONObject(fragmentRendererContext),
+						fragmentEntryLink.getEditableValuesJSONObject(),
+						fragmentRendererContext.getLocale(), "pageSize")));
+			httpServletRequest.setAttribute(
+				"liferay-commerce:account-orders-data-set:showPagination",
+				GetterUtil.getBoolean(
+					_fragmentEntryConfigurationParser.getFieldValue(
+						getConfigurationJSONObject(fragmentRendererContext),
+						fragmentEntryLink.getEditableValuesJSONObject(),
+						fragmentRendererContext.getLocale(),
+						"showPagination")));
 
 			requestDispatcher.include(httpServletRequest, httpServletResponse);
 		}
@@ -160,10 +189,8 @@ public class PendingAccountOrdersDataSetFragmentRenderer
 	}
 
 	private String _getConfigurationValue(
-		String fieldName, FragmentRendererContext fragmentRendererContext) {
-
-		FragmentEntryLink fragmentEntryLink =
-			fragmentRendererContext.getFragmentEntryLink();
+		String fieldName, FragmentEntryLink fragmentEntryLink,
+		FragmentRendererContext fragmentRendererContext) {
 
 		return GetterUtil.getString(
 			_fragmentEntryConfigurationParser.getFieldValue(

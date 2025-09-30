@@ -12,6 +12,17 @@
 	apiURL="<%= apiURL %>"
 	fdsActionDropdownItems="<%= fdsActionDropdownItems %>"
 	id="<%= CommerceFragmentFDSNames.ACCOUNT_ENTRIES %>"
+	itemsPerPage="<%= pageSize %>"
 	propsTransformer="{AccountsFDSPropsTransformer} from commerce-fragment-impl"
+	showPagination="<%= showPagination %>"
 	style="<%= displayStyle %>"
 />
+
+<c:if test="<%= hideActionsColumn %>">
+	<aui:style type="text/css">
+		.lfr-layout-structure-item-com-liferay-commerce-fragment-internal-renderer-accountsdatasetfragmentrenderer table th:last-of-type,
+		.lfr-layout-structure-item-com-liferay-commerce-fragment-internal-renderer-accountsdatasetfragmentrenderer table td:last-of-type {
+			display: none;
+		}
+	</aui:style>
+</c:if>

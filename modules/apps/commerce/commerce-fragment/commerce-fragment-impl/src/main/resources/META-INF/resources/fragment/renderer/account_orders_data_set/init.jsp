@@ -5,7 +5,10 @@
  */
 --%>
 
-<%@ taglib uri="http://liferay.com/tld/frontend-data-set" prefix="frontend-data-set" %><%@
+<%@ taglib uri="jakarta.tags.core" prefix="c" %>
+
+<%@ taglib uri="http://liferay.com/tld/aui" prefix="aui" %><%@
+taglib uri="http://liferay.com/tld/frontend-data-set" prefix="frontend-data-set" %><%@
 taglib uri="http://liferay.com/tld/theme" prefix="liferay-theme" %>
 
 <%@ page import="com.liferay.commerce.fragment.internal.constants.CommerceFragmentFDSNames" %><%@
@@ -21,4 +24,7 @@ Map<String, Object> additionalProps = (Map<String, Object>)request.getAttribute(
 String apiURL = (String)request.getAttribute("liferay-commerce:account-orders-data-set:apiURL");
 String displayStyle = (String)request.getAttribute("liferay-commerce:account-orders-data-set:displayStyle");
 List<FDSActionDropdownItem> fdsActionDropdownItems = (List<FDSActionDropdownItem>)request.getAttribute("liferay-commerce:account-orders-data-set:fdsActionDropdownItems");
+boolean hideActionsColumn = (boolean)request.getAttribute("liferay-commerce:account-orders-data-set:hideActionsColumn");
+int pageSize = (int)request.getAttribute("liferay-commerce:account-orders-data-set:pageSize");
+boolean showPagination = (boolean)request.getAttribute("liferay-commerce:account-orders-data-set:showPagination");
 %>
