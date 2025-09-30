@@ -62,8 +62,8 @@
 				},
 				{
 					"dataType": "double",
-					"defaultValue": "0.5",
-					"label": "panel-animation-duration",
+					"defaultValue": "0.1",
+					"label": "panel-animation-duration-seconds",
 					"name": "panelAnimationDuration",
 					"type": "text"
 				}
