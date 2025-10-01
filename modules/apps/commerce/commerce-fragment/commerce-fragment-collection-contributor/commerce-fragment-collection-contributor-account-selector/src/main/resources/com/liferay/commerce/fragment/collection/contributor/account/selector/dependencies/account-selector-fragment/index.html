@@ -1,9 +1,24 @@
 [@liferay_aui.style]
 	#${fragmentEntryLinkNamespace}-account-selector-dropdown-menu {
+		margin: 0;
+		max-height: unset;
+		max-width: unset;
+		min-height: unset;
+		min-width: unset;
+		overflow: unset;
+		padding: 0;
+	}
+
+	#${fragmentEntryLinkNamespace}-account-selector-dropdown-menu .dropdown-divider {
+		margin: 0;
+	}
+
+	#${fragmentEntryLinkNamespace}-account-selector-dropdown-menu .account-selector-dropdown-panel {
+		display: flex;
+		flex-direction: column;
 		max-height: ${configuration.dropdownHeight}px;
-		min-height: ${configuration.dropdownHeight}px;
 		max-width: ${configuration.dropdownWidth}px;
-		min-width: ${configuration.dropdownWidth}px
+		min-width: ${configuration.dropdownWidth}px;
 	}
 
 	#${fragmentEntryLinkNamespace}-account-selector-panel-slider {

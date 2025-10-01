@@ -78,9 +78,13 @@ accountSelectorDropdownPrevButton.addEventListener('click', () => {
 });
 
 function handleTitleChange(panel) {
-	accountSelectorPanelTitle.innerHTML = panel.value.querySelector(
+	const currentPanelTitle = panel.value.querySelector(
 		'.account-selector-panel-drop-zone-container'
-	).dataset.panelTitle;
+	)?.dataset?.panelTitle
+
+	if(currentPanelTitle) {
+		accountSelectorPanelTitle.innerHTML = currentPanelTitle;
+	}
 }
 
 function handleNav(nextPanelKey) {

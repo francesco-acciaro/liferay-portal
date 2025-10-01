@@ -10,7 +10,7 @@
 				},
 				{
 					"dataType": "int",
-					"defaultValue": "460",
+					"defaultValue": "500",
 					"label": "dropdown-height-px",
 					"name": "dropdownHeight",
 					"type": "text",
