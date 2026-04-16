@@ -174,7 +174,7 @@ public class CourseProgressDownloadRestController extends BaseRestController {
 							"r_p2s3CourseToP2S3Enrollments_c_p2s3Course");
 					JSONObject userJSONObject =
 						enrollmentJSONObject.optJSONObject(
-							"r_lUserToP2S3Enrollments_userId");
+							"r_lUserToP2S3Enrollments_user");
 
 					if ((courseJSONObject == null) ||
 						(userJSONObject == null)) {
