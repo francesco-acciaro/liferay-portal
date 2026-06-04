@@ -50,34 +50,36 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 
 		String title = _getTitle(objectEntryJSONObject);
 
-		if (title.isEmpty() || !_isTitleChanged(jsonObject, title)) {
+		if (title.isEmpty() || !_isTitleChanged(title, jsonObject)) {
 			return new ResponseEntity<>(json, HttpStatus.ACCEPTED);
 		}
 
-		String bearer = "Bearer " + jwt.getTokenValue();
+		String authorization = "Bearer " + jwt.getTokenValue();
 		long objectEntryId = objectEntryJSONObject.getLong("id");
 
 		if (objectDefinitionExternalReferenceCode.equals("P2S3_COURSE")) {
-			_handleCourse(bearer, objectEntryId, title, jsonObject);
+			_updateCourseFriendlyURL(
+				authorization, jsonObject, objectEntryId, title);
 		}
 		else if (objectDefinitionExternalReferenceCode.equals("P2S3_MODULE")) {
-			_handleModule(
-				bearer, objectEntryId, title, objectEntryJSONObject,
-				jsonObject);
+			_updateModuleFriendlyURL(
+				authorization, jsonObject, objectEntryId, objectEntryJSONObject,
+				title);
 		}
 		else {
-			_handleLessonOrQuiz(
-				bearer, objectEntryId, title, objectEntryJSONObject, jsonObject,
-				objectDefinitionExternalReferenceCode.equals("P2S3_LESSON"));
+			_updateLessonOrQuizFriendlyURL(
+				authorization, jsonObject,
+				objectDefinitionExternalReferenceCode.equals("P2S3_LESSON"),
+				objectEntryId, objectEntryJSONObject, title);
 		}
 
 		return new ResponseEntity<>(json, HttpStatus.ACCEPTED);
 	}
 
-	private JSONObject _fetchModule(String jwt, long moduleId) {
+	private JSONObject _fetchModule(String authorization, long moduleId) {
 		return new JSONObject(
 			get(
-				jwt,
+				authorization,
 				UriComponentsBuilder.fromPath(
 					"/o/c/p2s3modules/" + moduleId
 				).queryParam(
@@ -87,10 +89,12 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 				).toUri()));
 	}
 
-	private JSONArray _fetchModulesWithChildren(String jwt, String filter) {
+	private JSONArray _fetchModulesWithChildren(
+		String authorization, String filter) {
+
 		return new JSONObject(
 			get(
-				jwt,
+				authorization,
 				UriComponentsBuilder.fromPath(
 					"/o/c/p2s3modules"
 				).queryParam(
@@ -107,10 +111,12 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 		);
 	}
 
-	private String _fetchTitleSlug(String jwt, String urlBase, long id) {
+	private String _fetchTitleSlug(
+		String authorization, long id, String urlBase) {
+
 		JSONObject responseJSONObject = new JSONObject(
 			get(
-				jwt,
+				authorization,
 				UriComponentsBuilder.fromPath(
 					urlBase + id
 				).queryParam(
@@ -121,8 +127,8 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 		return _normalizeSlug(responseJSONObject.optString("title", ""));
 	}
 
-	private String _getCurrentFriendlyUrlPath(
-		JSONObject jsonObject, String dtoKey) {
+	private String _getCurrentFriendlyURLPath(
+		String dtoKey, JSONObject jsonObject) {
 
 		JSONObject dtoJSONObject = jsonObject.optJSONObject(dtoKey);
 
@@ -155,6 +161,10 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 		return null;
 	}
 
+	private String _getSlugFromTitle(JSONObject jsonObject) {
+		return _normalizeSlug(jsonObject.optString("title", ""));
+	}
+
 	private String _getTitle(JSONObject objectEntryJSONObject) {
 		JSONObject valuesJSONObject = objectEntryJSONObject.optJSONObject(
 			"values");
@@ -166,74 +176,8 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 		return valuesJSONObject.optString("title", "");
 	}
 
-	private void _handleCourse(
-		String bearer, long objectEntryId, String title,
-		JSONObject jsonObject) {
-
-		String courseSlug = _normalizeSlug(title);
-
-		_patchFriendlyUrl(
-			bearer, "/o/c/p2s3courses/", objectEntryId, courseSlug,
-			_getCurrentFriendlyUrlPath(jsonObject, "objectEntryDTOP2S3Course"));
-
-		_propagateFromCourse(bearer, objectEntryId, courseSlug);
-	}
-
-	private void _handleLessonOrQuiz(
-		String bearer, long objectEntryId, String title,
-		JSONObject objectEntryJSONObject, JSONObject jsonObject,
-		boolean lesson) {
-
-		long moduleId = objectEntryJSONObject.getJSONObject(
-			"values"
-		).getLong(
-			lesson ? "r_p2s3ModuleToP2S3Lessons_c_p2s3ModuleId" :
-				"r_p2s3ModuleToP2S3Quizzes_c_p2s3ModuleId"
-		);
-
-		JSONObject moduleJSONObject = _fetchModule(bearer, moduleId);
-
-		String courseSlug = _fetchTitleSlug(
-			bearer, "/o/c/p2s3courses/",
-			moduleJSONObject.getLong(
-				"r_p2s3CourseToP2S3Modules_c_p2s3CourseId"));
-
-		String childPath = StringBundler.concat(
-			courseSlug, "/", _slugFromTitle(moduleJSONObject), "/",
-			_normalizeSlug(title));
-
-		_patchFriendlyUrl(
-			bearer, lesson ? "/o/c/p2s3lessons/" : "/o/c/p2s3quizes/",
-			objectEntryId, childPath,
-			_getCurrentFriendlyUrlPath(
-				jsonObject,
-				lesson ? "objectEntryDTOP2S3Lesson" :
-					"objectEntryDTOP2S3Quizzes"));
-	}
-
-	private void _handleModule(
-		String bearer, long objectEntryId, String title,
-		JSONObject objectEntryJSONObject, JSONObject jsonObject) {
-
-		String courseSlug = _fetchTitleSlug(
-			bearer, "/o/c/p2s3courses/",
-			objectEntryJSONObject.getJSONObject(
-				"values"
-			).getLong(
-				"r_p2s3CourseToP2S3Modules_c_p2s3CourseId"
-			));
-		String moduleSlug = _normalizeSlug(title);
-
-		_patchFriendlyUrl(
-			bearer, "/o/c/p2s3modules/", objectEntryId,
-			courseSlug + "/" + moduleSlug,
-			_getCurrentFriendlyUrlPath(jsonObject, "objectEntryDTOP2S3Module"));
-
-		_propagateFromModule(bearer, objectEntryId, courseSlug, moduleSlug);
-	}
-
 	private boolean _isTitleChanged(
-		JSONObject jsonObject, String currentTitle) {
+		String currentTitle, JSONObject jsonObject) {
 
 		JSONObject originalObjectEntryJSONObject = jsonObject.optJSONObject(
 			"originalObjectEntry");
@@ -261,8 +205,8 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 	}
 
 	private void _patchChildren(
-		String jwt, JSONObject moduleJSONObject, String childrenKey,
-		String childUrlBase, String pathPrefix) {
+		String authorization, String childrenKey, String childUrlBase,
+		JSONObject moduleJSONObject, String pathPrefix) {
 
 		if (!moduleJSONObject.has(childrenKey)) {
 			return;
@@ -274,22 +218,22 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 		for (int i = 0; i < childrenJSONArray.length(); i++) {
 			JSONObject childJSONObject = childrenJSONArray.getJSONObject(i);
 
-			_patchFriendlyUrl(
-				jwt, childUrlBase, childJSONObject.getLong("id"),
-				pathPrefix + _slugFromTitle(childJSONObject),
-				childJSONObject.optString("friendlyUrlPath", ""));
+			_patchFriendlyURL(
+				authorization, childJSONObject.optString("friendlyUrlPath", ""),
+				childJSONObject.getLong("id"),
+				pathPrefix + _getSlugFromTitle(childJSONObject), childUrlBase);
 		}
 	}
 
-	private void _patchFriendlyUrl(
-		String jwt, String urlBase, long id, String newPath,
-		String currentPath) {
+	private void _patchFriendlyURL(
+		String authorization, String currentPath, long id, String newPath,
+		String urlBase) {
 
 		if (newPath.equals(currentPath)) {
 			return;
 		}
 
-		String requestBody = new JSONObject(
+		String body = new JSONObject(
 		).put(
 			"friendlyUrlPath", newPath
 		).put(
@@ -301,7 +245,7 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 		).toString();
 
 		patch(
-			jwt, requestBody,
+			authorization, body,
 			UriComponentsBuilder.fromPath(
 				urlBase + id
 			).build(
@@ -309,36 +253,39 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 	}
 
 	private void _propagateFromCourse(
-		String jwt, long courseId, String courseSlug) {
+		String authorization, long courseId, String courseSlug) {
 
 		JSONArray itemsJSONArray = _fetchModulesWithChildren(
-			jwt,
+			authorization,
 			"r_p2s3CourseToP2S3Modules_c_p2s3CourseId eq '" + courseId + "'");
 
 		for (int i = 0; i < itemsJSONArray.length(); i++) {
 			JSONObject moduleJSONObject = itemsJSONArray.getJSONObject(i);
 
 			String modulePath =
-				courseSlug + "/" + _slugFromTitle(moduleJSONObject);
+				courseSlug + "/" + _getSlugFromTitle(moduleJSONObject);
 
-			_patchFriendlyUrl(
-				jwt, "/o/c/p2s3modules/", moduleJSONObject.getLong("id"),
-				modulePath, moduleJSONObject.optString("friendlyUrlPath", ""));
+			_patchFriendlyURL(
+				authorization,
+				moduleJSONObject.optString("friendlyUrlPath", ""),
+				moduleJSONObject.getLong("id"), modulePath,
+				"/o/c/p2s3modules/");
 
 			_patchChildren(
-				jwt, moduleJSONObject, "p2s3ModuleToP2S3Lessons",
-				"/o/c/p2s3lessons/", modulePath + "/");
+				authorization, "p2s3ModuleToP2S3Lessons", "/o/c/p2s3lessons/",
+				moduleJSONObject, modulePath + "/");
 			_patchChildren(
-				jwt, moduleJSONObject, "p2s3ModuleToP2S3Quizzes",
-				"/o/c/p2s3quizes/", modulePath + "/");
+				authorization, "p2s3ModuleToP2S3Quizzes", "/o/c/p2s3quizes/",
+				moduleJSONObject, modulePath + "/");
 		}
 	}
 
 	private void _propagateFromModule(
-		String jwt, long moduleId, String courseSlug, String moduleSlug) {
+		String authorization, String courseSlug, long moduleId,
+		String moduleSlug) {
 
 		JSONArray itemsJSONArray = _fetchModulesWithChildren(
-			jwt, "id eq '" + moduleId + "'");
+			authorization, "id eq '" + moduleId + "'");
 
 		if (itemsJSONArray.isEmpty()) {
 			return;
@@ -350,15 +297,81 @@ public class ObjectActionLessonFriendlyURLUpdateRestController
 			courseSlug, "/", moduleSlug, "/");
 
 		_patchChildren(
-			jwt, moduleJSONObject, "p2s3ModuleToP2S3Lessons",
-			"/o/c/p2s3lessons/", pathPrefix);
+			authorization, "p2s3ModuleToP2S3Lessons", "/o/c/p2s3lessons/",
+			moduleJSONObject, pathPrefix);
 		_patchChildren(
-			jwt, moduleJSONObject, "p2s3ModuleToP2S3Quizzes",
-			"/o/c/p2s3quizes/", pathPrefix);
+			authorization, "p2s3ModuleToP2S3Quizzes", "/o/c/p2s3quizes/",
+			moduleJSONObject, pathPrefix);
 	}
 
-	private String _slugFromTitle(JSONObject jsonObject) {
-		return _normalizeSlug(jsonObject.optString("title", ""));
+	private void _updateCourseFriendlyURL(
+		String authorization, JSONObject jsonObject, long objectEntryId,
+		String title) {
+
+		String courseSlug = _normalizeSlug(title);
+
+		_patchFriendlyURL(
+			authorization,
+			_getCurrentFriendlyURLPath("objectEntryDTOP2S3Course", jsonObject),
+			objectEntryId, courseSlug, "/o/c/p2s3courses/");
+
+		_propagateFromCourse(authorization, objectEntryId, courseSlug);
+	}
+
+	private void _updateLessonOrQuizFriendlyURL(
+		String authorization, JSONObject jsonObject, boolean lesson,
+		long objectEntryId, JSONObject objectEntryJSONObject, String title) {
+
+		long moduleId = objectEntryJSONObject.getJSONObject(
+			"values"
+		).getLong(
+			lesson ? "r_p2s3ModuleToP2S3Lessons_c_p2s3ModuleId" :
+				"r_p2s3ModuleToP2S3Quizzes_c_p2s3ModuleId"
+		);
+
+		JSONObject moduleJSONObject = _fetchModule(authorization, moduleId);
+
+		String courseSlug = _fetchTitleSlug(
+			authorization,
+			moduleJSONObject.getLong(
+				"r_p2s3CourseToP2S3Modules_c_p2s3CourseId"),
+			"/o/c/p2s3courses/");
+
+		String childPath = StringBundler.concat(
+			courseSlug, "/", _getSlugFromTitle(moduleJSONObject), "/",
+			_normalizeSlug(title));
+
+		_patchFriendlyURL(
+			authorization,
+			_getCurrentFriendlyURLPath(
+				lesson ? "objectEntryDTOP2S3Lesson" :
+					"objectEntryDTOP2S3Quizzes",
+				jsonObject),
+			objectEntryId, childPath,
+			lesson ? "/o/c/p2s3lessons/" : "/o/c/p2s3quizes/");
+	}
+
+	private void _updateModuleFriendlyURL(
+		String authorization, JSONObject jsonObject, long objectEntryId,
+		JSONObject objectEntryJSONObject, String title) {
+
+		String courseSlug = _fetchTitleSlug(
+			authorization,
+			objectEntryJSONObject.getJSONObject(
+				"values"
+			).getLong(
+				"r_p2s3CourseToP2S3Modules_c_p2s3CourseId"
+			),
+			"/o/c/p2s3courses/");
+		String moduleSlug = _normalizeSlug(title);
+
+		_patchFriendlyURL(
+			authorization,
+			_getCurrentFriendlyURLPath("objectEntryDTOP2S3Module", jsonObject),
+			objectEntryId, courseSlug + "/" + moduleSlug, "/o/c/p2s3modules/");
+
+		_propagateFromModule(
+			authorization, courseSlug, objectEntryId, moduleSlug);
 	}
 
 }

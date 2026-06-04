@@ -50,7 +50,7 @@ liferay-learn-etc-spring-boot-object-action-exam-results-synchronization:
     resourcePath: /object/action/exam/results/synchronization
     type: objectAction
 liferay-learn-etc-spring-boot-object-action-lesson-friendly-url-update:
-    name: Liferay Learn Etc Spring Boot Object Action Lesson Friendly Url Update
+    name: Liferay Learn Etc Spring Boot Object Action Lesson Friendly URL Update
     oAuth2ApplicationExternalReferenceCode: liferay-learn-etc-spring-boot-oaua
     resourcePath: /object/action/lesson-friendly-url-update
     type: objectAction
