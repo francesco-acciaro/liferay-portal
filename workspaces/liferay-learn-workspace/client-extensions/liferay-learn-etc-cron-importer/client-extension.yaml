@@ -1,4 +1,5 @@
 assemble:
+    -   from: assets
     -   fromTask: fatJar
 liferay-learn-etc-cron-importer-oahs:
     .serviceAddress: localhost:8080

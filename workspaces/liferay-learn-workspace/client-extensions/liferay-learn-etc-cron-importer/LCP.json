@@ -1,8 +1,14 @@
 {
 	"concurrencyPolicy": "Forbid",
-	"cpu": 1,
+	"cpu": 4,
 	"env": {
-		"JAVA_VERSION": "zulu21"
+		"GRADLE_OPTS": "-Dorg.gradle.daemon=false",
+		"JAVA_VERSION": "zulu21",
+		"LIFERAY_LEARN_ETC_CRON_GITHUB_BRANCH": "master",
+		"LIFERAY_LEARN_ETC_CRON_GITHUB_DEPLOY_KEY": "@liferay-learn-github-deploy-key",
+		"LIFERAY_LEARN_ETC_CRON_GITHUB_USER": "liferay",
+		"LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR": "/home/liferay/liferay-learn",
+		"LIFERAY_LEARN_RESOURCE_DOMAIN": "https://resources.learn-dev.liferay.com"
 	},
 	"environments": {
 		"extprd": {
@@ -17,7 +23,7 @@
 	},
 	"id": "__PROJECT_ID__",
 	"kind": "CronJob",
-	"memory": 1024,
+	"memory": 3000,
 	"scale": 1,
 	"schedule": "29 9 * * *",
 	"volumes": {
