@@ -1,0 +1,34 @@
+buildscript {
+	dependencies {
+		classpath group: "com.liferay", name: "com.liferay.gradle.plugins.defaults", version: "latest.release"
+	}
+
+	repositories {
+		maven {
+			url new File(rootProject.projectDir, "../../.m2-tmp")
+		}
+
+		maven {
+			url "https://repository-cdn.liferay.com/nexus/content/groups/public"
+		}
+	}
+}
+
+apply plugin: "application"
+apply plugin: "com.liferay.source.formatter"
+apply plugin: "java-library"
+
+task fatJar(type: Jar)
+
+fatJar {
+	archiveBaseName = project.name + "-all"
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+	manifest {
+		attributes "Main-Class": "com.liferay.learn.Main"
+	}
+
+	with jar
+}
+
+mainClassName = "com.liferay.learn.Main"

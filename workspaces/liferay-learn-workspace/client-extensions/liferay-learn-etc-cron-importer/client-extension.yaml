@@ -1,0 +1,16 @@
+assemble:
+    -   fromTask: fatJar
+liferay-learn-etc-cron-importer-oahs:
+    .serviceAddress: localhost:8080
+    .serviceScheme: http
+    name: Liferay Learn Etc Cron Importer OAuth Application Headless Server
+    scopes:
+        -   Liferay.Data.Engine.REST.everything
+        -   Liferay.Headless.Admin.Taxonomy.everything
+        -   Liferay.Headless.Admin.User.everything.read
+        -   Liferay.Headless.Batch.Engine.everything
+        -   Liferay.Headless.Delivery.everything
+        -   liferay-json-web-services.everything.write
+        -   liferay-json-web-services.everything
+        -   liferay-json-web-services.everything.read
+    type: oAuthApplicationHeadlessServer

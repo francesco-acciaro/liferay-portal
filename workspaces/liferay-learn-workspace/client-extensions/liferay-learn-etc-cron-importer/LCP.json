@@ -1,0 +1,26 @@
+{
+	"concurrencyPolicy": "Forbid",
+	"cpu": 1,
+	"env": {
+		"JAVA_VERSION": "zulu21"
+	},
+	"environments": {
+		"extprd": {
+			"deploy": false
+		},
+		"extuat": {
+			"deploy": false
+		},
+		"infra": {
+			"deploy": false
+		}
+	},
+	"id": "__PROJECT_ID__",
+	"kind": "CronJob",
+	"memory": 1024,
+	"scale": 1,
+	"schedule": "29 9 * * *",
+	"volumes": {
+		"publicHtml": "/public_html"
+	}
+}
