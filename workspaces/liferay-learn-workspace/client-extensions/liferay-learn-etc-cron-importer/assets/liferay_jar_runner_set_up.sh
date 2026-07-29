@@ -36,13 +36,22 @@ function clone_repository {
 function copy_resources {
 	echo "[cron-importer] Phase: copy resources"
 
+	local delete_flag="--delete"
+
+	if [ -n "${LIFERAY_LEARN_ETC_CRON_PARTIAL:-}" ]
+	then
+		echo "[cron-importer] Partial mode: rsync without --delete."
+
+		delete_flag=""
+	fi
+
 	rsync --include="*.zip" --include="*/" --exclude="*" --prune-empty-dirs --recursive "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/" /public_html
 
-	rsync --delete --prune-empty-dirs --recursive "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/examples" /public_html
+	rsync ${delete_flag} --prune-empty-dirs --recursive "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/examples" /public_html
 
-	rsync --delete --prune-empty-dirs --recursive "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/images" /public_html
+	rsync ${delete_flag} --prune-empty-dirs --recursive "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/images" /public_html
 
-	rsync --delete --prune-empty-dirs --recursive "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/reference" /public_html
+	rsync ${delete_flag} --prune-empty-dirs --recursive "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/reference" /public_html
 }
 
 function generate_docs {
@@ -66,7 +75,39 @@ function main {
 
 	copy_resources
 
+	if [ -z "${LIFERAY_LEARN_ETC_CRON_PARTIAL:-}" ]
+	then
+		write_manifest
+	else
+		echo "[cron-importer] Partial mode: manifest not written (it only describes full runs)."
+	fi
+
+	touch /tmp/liferay_jar_runner_set_up_ok
+
 	echo "[cron-importer] Setup completed, handing over to the importer."
+}
+
+function write_manifest {
+	echo "[cron-importer] Phase: write manifest"
+
+	local commit
+
+	commit=$(git -C "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}" rev-parse HEAD)
+
+	local zips_json
+
+	zips_json=$(cd "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site" && find . -name "*.zip" -type f | sed "s|^\./||" | sort | awk '{printf "%s\"%s\"", separator, $0; separator = ", "}')
+
+	cat > /public_html/.learn-importer-manifest.json <<EOF
+{
+	"generatedAt": "$(date --iso-8601=seconds --utc)",
+	"managedRoots": ["examples", "images", "reference"],
+	"managedZips": [${zips_json}],
+	"sourceCommit": "${commit}"
+}
+EOF
+
+	echo "[cron-importer] Manifest written to /public_html/.learn-importer-manifest.json."
 }
 
 main "${@}"
