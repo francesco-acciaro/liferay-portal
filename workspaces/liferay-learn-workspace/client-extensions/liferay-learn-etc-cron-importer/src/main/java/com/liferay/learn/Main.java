@@ -13,7 +13,7 @@ import java.nio.file.Paths;
  */
 public class Main {
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws Exception {
 		if (!Files.exists(Paths.get("/tmp/liferay_jar_runner_set_up_ok"))) {
 			System.err.println(
 				"liferay-learn-etc-cron-importer: the setup script did not " +
@@ -25,6 +25,8 @@ public class Main {
 		System.out.println(
 			"liferay-learn-etc-cron-importer: setup completed, import not " +
 				"yet implemented (F1a)");
+
+		Files.createFile(Paths.get("/tmp/liferay_jar_runner_main_ok"));
 	}
 
 }
