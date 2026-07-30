@@ -3,10 +3,17 @@
 	"cpu": 2,
 	"env": {
 		"JAVA_VERSION": "zulu21",
-		"LIFERAY_LEARN_ETC_CRON_GITHUB_BRANCH": "learn-cron-importer",
+		"LIFERAY_JAR_RUNNER_JAVA_OPTS": "-Xmx2048m",
+		"LIFERAY_LEARN_ETC_CRON_GITHUB_BRANCH": "learn-cron-importer-mini",
 		"LIFERAY_LEARN_ETC_CRON_GITHUB_DEPLOY_KEY": "@learn-fork-deploy-key",
 		"LIFERAY_LEARN_ETC_CRON_GITHUB_USER": "francesco-acciaro",
 		"LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR": "/home/liferay/liferay-learn",
+		"LIFERAY_LEARN_ETC_CRON_LIFERAY_OAUTH_CLIENT_ID": "@learn-importer-oauth-client-id",
+		"LIFERAY_LEARN_ETC_CRON_LIFERAY_OAUTH_CLIENT_SECRET": "@learn-importer-oauth-client-secret",
+		"LIFERAY_LEARN_ETC_CRON_LIFERAY_SITE_FRIENDLY_URL_PATH": "guest",
+		"LIFERAY_LEARN_ETC_CRON_LIFERAY_URL": "https://learn-dev.liferay.com",
+		"LIFERAY_LEARN_ETC_CRON_PARTIAL": "true",
+		"LIFERAY_LEARN_ETC_SKIP_JAPANESE_CONTENT": "true",
 		"LIFERAY_LEARN_RESOURCE_DOMAIN": "https://resources.learn-dev.liferay.com",
 		"LIFERAY_LEARN_UPDATE_EXAMPLES_JOBS": "4"
 	},
@@ -25,7 +32,7 @@
 	"kind": "CronJob",
 	"memory": 3000,
 	"scale": 1,
-	"schedule": "8 13 * * *",
+	"schedule": "12 10 * * *",
 	"volumes": {
 		"publicHtml": "/public_html"
 	}

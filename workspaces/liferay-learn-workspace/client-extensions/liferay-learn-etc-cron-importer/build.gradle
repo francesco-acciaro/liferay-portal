@@ -20,9 +20,32 @@ apply plugin: "java-library"
 
 task fatJar(type: Jar)
 
+dependencies {
+	implementation group: "com.liferay", name: "com.liferay.data.engine.rest.client", version: "latest.release"
+	implementation group: "com.liferay", name: "com.liferay.headless.admin.taxonomy.client", version: "latest.release"
+	implementation group: "com.liferay", name: "com.liferay.headless.admin.user.client", version: "latest.release"
+	implementation group: "com.liferay", name: "com.liferay.headless.delivery.client", version: "latest.release"
+	implementation group: "com.liferay", name: "com.liferay.petra.lang", version: "latest.release"
+	implementation group: "com.liferay", name: "com.liferay.petra.string", version: "latest.release"
+	implementation group: "com.liferay.portal", name: "com.liferay.portal.kernel", version: "latest.release"
+	implementation group: "com.vladsch.flexmark", name: "flexmark-all", version: "0.64.8"
+	implementation group: "commons-io", name: "commons-io", version: "2.19.0"
+	implementation group: "org.apache.httpcomponents", name: "httpclient", version: "4.5.13"
+	implementation group: "org.apache.logging.log4j", name: "log4j-slf4j-impl", version: "2.22.1"
+	implementation group: "org.json", name: "json", version: "20231013"
+	implementation group: "org.yaml", name: "snakeyaml", version: "2.3"
+}
+
 fatJar {
 	archiveBaseName = project.name + "-all"
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	excludes = ["META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.SF"]
+
+	from {
+		configurations.runtimeClasspath.collect {
+			it.isDirectory() ? it : zipTree(it)
+		}
+	}
 
 	manifest {
 		attributes "Main-Class": "com.liferay.learn.Main"
@@ -32,3 +55,13 @@ fatJar {
 }
 
 mainClassName = "com.liferay.learn.Main"
+
+repositories {
+	maven {
+		url new File(rootProject.projectDir, "../../.m2-tmp")
+	}
+
+	maven {
+		url "https://repository-cdn.liferay.com/nexus/content/groups/public"
+	}
+}
