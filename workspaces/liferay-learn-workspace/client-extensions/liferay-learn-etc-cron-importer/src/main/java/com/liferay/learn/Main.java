@@ -494,7 +494,7 @@ public class Main {
 						siteStructuredContent.getId());
 
 					if (StringUtil.equals(
-							DigestUtils.md5Hex(new FileInputStream(fileName)),
+							_getHTMLMD5Hex(new File(fileName)),
 							_getMD5Hex(siteStructuredContent)) &&
 						!_skipDiffCheck) {
 
@@ -847,6 +847,11 @@ public class Main {
 	}
 
 	private String _getHTML(File file) throws Exception {
+		return FileUtils.readFileToString(
+			_getHTMLFile(file), StandardCharsets.UTF_8);
+	}
+
+	private File _getHTMLFile(File file) throws Exception {
 		String htmlFilePath = file.getCanonicalPath();
 
 		htmlFilePath = htmlFilePath.replaceFirst(
@@ -854,9 +859,11 @@ public class Main {
 
 		htmlFilePath = htmlFilePath.replaceFirst("\\.md", ".html");
 
-		File htmlFile = new File(htmlFilePath);
+		return new File(htmlFilePath);
+	}
 
-		return FileUtils.readFileToString(htmlFile, StandardCharsets.UTF_8);
+	private String _getHTMLMD5Hex(File file) throws Exception {
+		return DigestUtils.md5Hex(new FileInputStream(_getHTMLFile(file)));
 	}
 
 	private String _getMD5Hex(StructuredContent structuredContent) {
@@ -1712,9 +1719,7 @@ public class Main {
 		ContentFieldValue englishMD5HexContentFieldValue =
 			new ContentFieldValue() {
 				{
-					setData(
-						() -> DigestUtils.md5Hex(
-							new FileInputStream(englishFile)));
+					setData(() -> _getHTMLMD5Hex(englishFile));
 				}
 			};
 		ContentFieldValue englishNavigationContentFieldValue =
@@ -1776,9 +1781,8 @@ public class Main {
 									new ContentFieldValue() {
 										{
 											setData(
-												() -> DigestUtils.md5Hex(
-													new FileInputStream(
-														japaneseFile)));
+												() -> _getHTMLMD5Hex(
+													japaneseFile));
 										}
 									}
 								).build());
