@@ -118,6 +118,16 @@ function check_generated_site {
 	fi
 
 	echo "[cron-importer] Generated site verified: ${expected_count} HTML files fresh from this run."
+
+	local site_digest=$( \
+		cd "${site_dir}" && \
+		find . -name "*.html" -print0 | \
+			sort --zero-terminated | \
+			xargs --null md5sum | \
+			md5sum | \
+			awk '{print $1}')
+
+	echo "[cron-importer] Generated site digest: ${site_digest}"
 }
 
 function check_reference_cache {
