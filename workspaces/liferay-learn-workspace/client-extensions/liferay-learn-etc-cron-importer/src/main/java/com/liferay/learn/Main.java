@@ -108,7 +108,13 @@ import org.yaml.snakeyaml.Yaml;
 public class Main {
 
 	public static void main(String[] arguments) throws Exception {
-		if (!Files.exists(Paths.get("/tmp/liferay_jar_runner_set_up_ok"))) {
+		List<String> argumentsList = Arrays.asList(arguments);
+
+		boolean preflight = argumentsList.contains("--preflight");
+
+		if (!preflight &&
+			!Files.exists(Paths.get("/tmp/liferay_jar_runner_set_up_ok"))) {
+
 			System.err.println(
 				"liferay-learn-etc-cron-importer: the setup script did not " +
 					"complete, failing the run");
@@ -120,27 +126,28 @@ public class Main {
 		System.setProperty("sun.net.client.defaultReadTimeout", "120000");
 
 		String liferayDataDefinitionKey = System.getenv(
-			"LIFERAY_LEARN_ETC_CRON_LIFERAY_DATA_DEFINITION_KEY");
+			"LIFERAY_LEARN_ETC_CRON_IMPORTER_DXP_DATA_DEFINITION_KEY");
 
 		if (liferayDataDefinitionKey == null) {
 			liferayDataDefinitionKey = "LEARN-ARTICLE";
 		}
 
 		String liferaySiteFriendlyUrlPath = System.getenv(
-			"LIFERAY_LEARN_ETC_CRON_LIFERAY_SITE_FRIENDLY_URL_PATH");
+			"LIFERAY_LEARN_ETC_CRON_IMPORTER_DXP_SITE_FRIENDLY_URL_PATH");
 
 		if (liferaySiteFriendlyUrlPath == null) {
 			liferaySiteFriendlyUrlPath = "liferay-learn";
 		}
 
-		String liferayUrl = System.getenv("LIFERAY_LEARN_ETC_CRON_LIFERAY_URL");
+		String liferayUrl = System.getenv(
+			"LIFERAY_LEARN_ETC_CRON_IMPORTER_DXP_URL");
 
 		if (liferayUrl == null) {
 			liferayUrl = "http://localhost:8080";
 		}
 
 		String baseDir = System.getenv(
-			"LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR");
+			"LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR");
 
 		if (baseDir == null) {
 			baseDir = "~/liferay-learn";
@@ -148,17 +155,44 @@ public class Main {
 
 		File baseDirFile = new File(baseDir);
 
-		Main main = new Main(
-			liferayDataDefinitionKey,
-			System.getenv("LIFERAY_LEARN_ETC_CRON_LIFERAY_OAUTH_CLIENT_ID"),
-			System.getenv("LIFERAY_LEARN_ETC_CRON_LIFERAY_OAUTH_CLIENT_SECRET"),
-			liferaySiteFriendlyUrlPath, new URL(liferayUrl), baseDirFile,
-			GetterUtil.getBoolean(
-				System.getenv("LIFERAY_LEARN_ETC_CRON_OFFLINE")),
-			GetterUtil.getBoolean(
-				System.getenv("LIFERAY_LEARN_ETC_SKIP_DIFF_CHECK")),
-			GetterUtil.getBoolean(
-				System.getenv("LIFERAY_LEARN_ETC_SKIP_JAPANESE_CONTENT")));
+		Main main = null;
+
+		try {
+			main = new Main(
+				liferayDataDefinitionKey,
+				System.getenv(
+					"LIFERAY_LEARN_ETC_CRON_IMPORTER_OAUTH_CLIENT_ID"),
+				System.getenv(
+					"LIFERAY_LEARN_ETC_CRON_IMPORTER_OAUTH_CLIENT_SECRET"),
+				liferaySiteFriendlyUrlPath, new URL(liferayUrl), baseDirFile,
+				GetterUtil.getBoolean(
+					System.getenv("LIFERAY_LEARN_ETC_CRON_IMPORTER_OFFLINE")),
+				GetterUtil.getBoolean(
+					System.getenv(
+						"LIFERAY_LEARN_ETC_CRON_IMPORTER_SKIP_MD5_CHECK")),
+				System.getenv(
+					"LIFERAY_LEARN_ETC_CRON_IMPORTER_SKIP_LOCALES_CONTENT"));
+		}
+		catch (Exception exception) {
+			if (!preflight) {
+				throw exception;
+			}
+
+			System.out.println(
+				StringBundler.concat(
+					"[preflight] FAILED (DXP): unable to authenticate against ",
+					liferayUrl, " or to resolve the site \"",
+					liferaySiteFriendlyUrlPath, "\", the \"",
+					liferayDataDefinitionKey,
+					"\" content structure or the taxonomies: ",
+					_describe(exception)));
+
+			System.exit(1);
+		}
+
+		if (preflight) {
+			System.exit(main.preflight());
+		}
 
 		main.uploadToLiferay();
 
@@ -169,7 +203,7 @@ public class Main {
 			String liferayDataDefinitionKey, String liferayOAuthClientId,
 			String liferayOAuthClientSecret, String liferaySiteFriendlyUrlPath,
 			URL liferayURL, File baseDir, boolean offline,
-			boolean skipDiffCheck, boolean skipJapaneseContent)
+			boolean skipDiffCheck, String skipLocalesContent)
 		throws Exception {
 
 		_liferayOAuthClientId = liferayOAuthClientId;
@@ -177,7 +211,18 @@ public class Main {
 		_liferayURL = liferayURL;
 		_offline = offline;
 		_skipDiffCheck = skipDiffCheck;
-		_skipJapaneseContent = skipJapaneseContent;
+
+		if (skipLocalesContent != null) {
+			for (String skipLocale : skipLocalesContent.split(",")) {
+				String trimmedSkipLocale = skipLocale.trim();
+
+				if (!trimmedSkipLocale.isEmpty()) {
+					_skipLocales.add(trimmedSkipLocale);
+				}
+			}
+		}
+
+		System.out.println("Locales excluded from import: " + _skipLocales);
 
 		_baseDirName = baseDir.getCanonicalPath();
 
@@ -219,6 +264,150 @@ public class Main {
 
 			_loadTaxonomyVocabularies();
 		}
+	}
+
+	public int preflight() throws Exception {
+		System.out.println(
+			"[preflight] DXP reachable, site, content structure and " +
+				"taxonomies resolved.");
+
+		List<String> preflightErrorMessages = new ArrayList<>();
+		int preflightWarningCount = 0;
+
+		Map<String, String> uuidFileNames = new HashMap<>();
+		int validatedCount = 0;
+
+		for (String fileName : _fileNames) {
+			if (!fileName.contains("/en/") || !fileName.endsWith(".md")) {
+				continue;
+			}
+
+			validatedCount++;
+
+			Map<String, Object> data = null;
+			String text = null;
+
+			try {
+				text = FileUtils.readFileToString(
+					new File(fileName), StandardCharsets.UTF_8);
+
+				SnakeYamlFrontMatterVisitor snakeYamlFrontMatterVisitor =
+					new SnakeYamlFrontMatterVisitor();
+
+				snakeYamlFrontMatterVisitor.visit(_parser.parse(text));
+
+				data = snakeYamlFrontMatterVisitor.getData();
+			}
+			catch (Exception exception) {
+				preflightErrorMessages.add(
+					fileName + ": unparsable front matter: " +
+						_describe(exception));
+
+				continue;
+			}
+
+			String uuid = _getUuid(text);
+
+			if (uuid.isEmpty()) {
+				preflightErrorMessages.add(
+					fileName + ": missing uuid in the front matter");
+			}
+			else {
+				String duplicateFileName = uuidFileNames.put(uuid, fileName);
+
+				if (duplicateFileName != null) {
+					preflightErrorMessages.add(
+						StringBundler.concat(
+							"Duplicate uuid ", uuid, " in ", duplicateFileName,
+							" and ", fileName));
+				}
+			}
+
+			if (data == null) {
+				continue;
+			}
+
+			if (data.containsKey("visibility") &&
+				!(data.get("visibility") instanceof List)) {
+
+				preflightErrorMessages.add(
+					StringBundler.concat(
+						fileName, ": \"visibility\" must be a list of role ",
+						"names, otherwise the article is published with no ",
+						"permissions"));
+			}
+
+			Object taxonomyCategoryNames = data.get("taxonomy-category-names");
+
+			if (taxonomyCategoryNames instanceof List) {
+				for (Object taxonomyCategoryName :
+						(List<?>)taxonomyCategoryNames) {
+
+					if ((taxonomyCategoryName instanceof String) &&
+						!_taxonomyCategoriesJSONObject.has(
+							(String)taxonomyCategoryName)) {
+
+						preflightErrorMessages.add(
+							StringBundler.concat(
+								fileName, ": no taxonomy category exists with ",
+								"the name \"", taxonomyCategoryName, "\""));
+					}
+				}
+			}
+
+			Object toc = data.get("toc");
+
+			if (toc instanceof List) {
+				for (Object tocEntry : (List<?>)toc) {
+					if (!(tocEntry instanceof String)) {
+						continue;
+					}
+
+					Matcher matcher = _markdownLinkPattern.matcher(
+						(String)tocEntry);
+
+					if (matcher.find()) {
+						continue;
+					}
+
+					File parentFile = new File(fileName);
+
+					File tocFile = new File(
+						parentFile.getParent() + File.separator + tocEntry);
+
+					if (!tocFile.exists() || tocFile.isDirectory()) {
+						preflightWarningCount++;
+
+						System.out.println(
+							StringBundler.concat(
+								"[preflight] Warning: ", fileName,
+								" lists a nonexistent toc entry ", tocEntry));
+					}
+				}
+			}
+		}
+
+		System.out.println(
+			StringBundler.concat(
+				"[preflight] Validated ", validatedCount, " markdown files: ",
+				preflightErrorMessages.size(), " errors, ",
+				preflightWarningCount, " warnings."));
+
+		if (preflightErrorMessages.isEmpty()) {
+			System.out.println("[preflight] PASSED");
+
+			return 0;
+		}
+
+		System.out.println(
+			"[preflight] FAILED (content): " + preflightErrorMessages.size() +
+				" blocking problems, nothing was generated or imported.");
+
+		for (String preflightErrorMessage : preflightErrorMessages) {
+			System.out.println("[preflight] " + preflightErrorMessage);
+		}
+
+		return 1;
 	}
 
 	public void uploadToLiferay() throws Exception {
@@ -410,9 +599,38 @@ public class Main {
 			}
 		}
 
+		int inventoryCount = existingStructuredContentIds.size();
+
 		existingStructuredContentIds.removeAll(importedStructuredContentIds);
 
-		if (_isOrphanCleanupEnabled()) {
+		int orphanCount = existingStructuredContentIds.size();
+
+		boolean orphansDeleted = false;
+
+		if (!_isOrphanCleanupEnabled()) {
+			System.out.println(
+				orphanCount +
+					" orphaned structured contents were kept (cleanup " +
+						"disabled).");
+		}
+		else if (!_errorMessages.isEmpty()) {
+			System.out.println(
+				StringBundler.concat(
+					"Skipping orphan cleanup because the run has ",
+					_errorMessages.size(), " errors: ", orphanCount,
+					" orphaned structured contents were kept."));
+		}
+		else if (orphanCount > _getOrphanThreshold(inventoryCount)) {
+			_error(
+				StringBundler.concat(
+					"Orphan cleanup aborted: ", orphanCount, " orphans exceed ",
+					"the threshold of ", _getOrphanThreshold(inventoryCount),
+					" for an inventory of ", inventoryCount,
+					". No structured content was deleted."));
+		}
+		else {
+			orphansDeleted = true;
+
 			for (Long existingStructuredContentId :
 					existingStructuredContentIds) {
 
@@ -430,7 +648,7 @@ public class Main {
 				catch (Exception exception) {
 					_error(
 						structuredContent.getFriendlyUrlPath() + ": " +
-							exception.getMessage());
+							_describe(exception));
 				}
 			}
 		}
@@ -438,16 +656,9 @@ public class Main {
 		System.out.println(
 			addedStructuredContentCount + " structured contents were added.");
 
-		if (_isOrphanCleanupEnabled()) {
+		if (orphansDeleted) {
 			System.out.println(
-				existingStructuredContentIds.size() +
-					" structured contents were deleted.");
-		}
-		else {
-			System.out.println(
-				existingStructuredContentIds.size() +
-					" orphaned structured contents were kept (cleanup " +
-						"disabled).");
+				orphanCount + " structured contents were deleted.");
 		}
 
 		System.out.println(
@@ -473,6 +684,20 @@ public class Main {
 		}
 	}
 
+	private static String _describe(Exception exception) {
+		Class<?> clazz = exception.getClass();
+
+		String className = clazz.getName();
+
+		String message = exception.getMessage();
+
+		if (message == null) {
+			return className;
+		}
+
+		return className + ": " + message;
+	}
+
 	private void _addFileNames(String fileName) {
 		File file = new File(fileName);
 
@@ -486,20 +711,6 @@ public class Main {
 		}
 
 		_fileNames.add(fileName);
-	}
-
-	private String _describe(Exception exception) {
-		Class<?> clazz = exception.getClass();
-
-		String className = clazz.getName();
-
-		String message = exception.getMessage();
-
-		if (message == null) {
-			return className;
-		}
-
-		return className + ": " + message;
 	}
 
 	private void _error(String errorMessage) {
@@ -763,6 +974,21 @@ public class Main {
 
 			throw new Exception("Unable to get OAuth authorization");
 		}
+	}
+
+	private int _getOrphanThreshold(int inventoryCount) {
+		int percentage = GetterUtil.getInteger(
+			System.getenv(
+				"LIFERAY_LEARN_ETC_CRON_IMPORTER_ORPHAN_THRESHOLD_PERCENTAGE"),
+			5);
+
+		int threshold = (inventoryCount * percentage) / 100;
+
+		if (threshold < 5) {
+			return 5;
+		}
+
+		return threshold;
 	}
 
 	private File _getParentMarkdownFile(File file) throws Exception {
@@ -1242,10 +1468,11 @@ public class Main {
 
 	private boolean _isOrphanCleanupEnabled() {
 		if (Objects.equals(
-				System.getenv("LIFERAY_LEARN_ETC_CRON_ORPHAN_CLEANUP"),
+				System.getenv("LIFERAY_LEARN_ETC_CRON_IMPORTER_ORPHAN_CLEANUP"),
 				"true") &&
 			!Objects.equals(
-				System.getenv("LIFERAY_LEARN_ETC_CRON_PARTIAL"), "true")) {
+				System.getenv("LIFERAY_LEARN_ETC_CRON_IMPORTER_PARTIAL"),
+				"true")) {
 
 			return true;
 		}
@@ -1512,7 +1739,7 @@ public class Main {
 		File japaneseFile = new File(
 			StringUtil.replace(fileName, "/en/", "/ja/"));
 
-		if (!_skipJapaneseContent && japaneseFile.exists()) {
+		if (!_skipLocales.contains("ja") && japaneseFile.exists()) {
 			String japaneseText = FileUtils.readFileToString(
 				japaneseFile, StandardCharsets.UTF_8);
 
@@ -1719,7 +1946,7 @@ public class Main {
 	private Parser _parser;
 	private SiteResource _siteResource;
 	private final boolean _skipDiffCheck;
-	private final boolean _skipJapaneseContent;
+	private final Set<String> _skipLocales = new TreeSet<>();
 	private final Map<String, Long> _structuredContentFolderIds =
 		new HashMap<>();
 	private StructuredContentFolderResource _structuredContentFolderResource;

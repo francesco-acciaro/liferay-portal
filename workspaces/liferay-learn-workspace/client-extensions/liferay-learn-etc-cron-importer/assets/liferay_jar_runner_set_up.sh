@@ -2,19 +2,122 @@
 
 set -euo pipefail
 
-function check_generated_site {
-	local html_count
+_APPS_MARKDOWN_FILE_NAME="${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR:-}/docs/reference/latest/en/dxp/apps.md"
 
-	html_count=$(find "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site" -name "*.html" -newer "${_GENERATION_START_MARKER}" | wc -l)
+function check_environment {
+	echo "[cron-importer] Phase: preflight (environment)"
 
-	if [ "${html_count}" -eq 0 ]
+	local missing_names=()
+
+	local name
+
+	for name in \
+		LIFERAY_LEARN_ETC_CRON_IMPORTER_DXP_URL \
+		LIFERAY_LEARN_ETC_CRON_IMPORTER_GITHUB_DEPLOY_KEY \
+		LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR \
+		LIFERAY_LEARN_ETC_CRON_IMPORTER_OAUTH_CLIENT_ID \
+		LIFERAY_LEARN_ETC_CRON_IMPORTER_OAUTH_CLIENT_SECRET \
+		LIFERAY_LEARN_RESOURCE_DOMAIN
+	do
+		if [ -z "${!name:-}" ]
+		then
+			missing_names+=("${name}")
+		fi
+	done
+
+	if [[ "${#missing_names[@]}" -gt 0 ]]
 	then
-		echo "[cron-importer] ERROR: no fresh HTML generated, refusing to publish stale content"
+		echo "[cron-importer] ERROR: missing required environment variables: ${missing_names[*]}"
 
 		exit 1
 	fi
 
-	echo "[cron-importer] Generated ${html_count} fresh HTML files."
+	if ! touch /public_html/.learn-importer-write-test 2> /dev/null
+	then
+		echo "[cron-importer] ERROR: /public_html is not writable"
+
+		exit 1
+	fi
+
+	rm --force /public_html/.learn-importer-write-test
+
+	local resource_url="${LIFERAY_LEARN_RESOURCE_DOMAIN}"
+
+	case "${resource_url}" in
+		http://*|https://*)
+			;;
+		*)
+			resource_url="https://${resource_url}"
+			;;
+	esac
+
+	local resource_status
+
+	resource_status=$( \
+		curl \
+			--max-time 30 \
+			--output /dev/null \
+			--silent \
+			--write-out "%{http_code}" \
+			"${resource_url}/" || true)
+
+	if [ "${resource_status}" = "000" ]
+	then
+		echo "[cron-importer] ERROR: the resource domain ${resource_url} is unreachable"
+
+		exit 1
+	fi
+
+	echo "[cron-importer] Environment verified, ${resource_url} answered ${resource_status}."
+}
+
+function check_generated_site {
+	local docs_dir="${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/docs"
+	local site_dir="${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/site"
+
+	local examples=()
+	local expected_count=0
+	local missing_count=0
+	local stale_count=0
+
+	local html_file markdown_file
+
+	while IFS= read -r markdown_file
+	do
+		expected_count=$((expected_count + 1))
+
+		html_file="${site_dir}/${markdown_file%.md}.html"
+
+		if [ ! -f "${html_file}" ]
+		then
+			missing_count=$((missing_count + 1))
+
+			if [[ "${#examples[@]}" -lt 5 ]]
+			then
+				examples+=("never generated: ${html_file}")
+			fi
+		elif [ ! "${html_file}" -nt "${_GENERATION_START_MARKER}" ]
+		then
+			stale_count=$((stale_count + 1))
+
+			if [[ "${#examples[@]}" -lt 5 ]]
+			then
+				examples+=("not regenerated in this run: ${html_file}")
+			fi
+		fi
+	done < <(find "${docs_dir}" -path "*/en/*" -name "*.md" -not -path "*/_snippets/*" -not -path "*/resources/*" -printf "%P\n")
+
+	if [[ "${missing_count}" -gt 0 ]] ||
+	   [[ "${stale_count}" -gt 0 ]]
+	then
+		echo "[cron-importer] ERROR: the generated site does not match the markdown sources: ${missing_count} missing and ${stale_count} not regenerated out of ${expected_count}, refusing to publish"
+
+		printf "[cron-importer]   %s\n" "${examples[@]}"
+
+		exit 1
+	fi
+
+	echo "[cron-importer] Generated site verified: ${expected_count} HTML files fresh from this run."
 }
 
 function clone_repository {
@@ -22,15 +125,15 @@ function clone_repository {
 
 	eval "$(ssh-agent -s)"
 
-	echo -e "-----BEGIN OPENSSH PRIVATE KEY-----\n${LIFERAY_LEARN_ETC_CRON_GITHUB_DEPLOY_KEY}\n-----END OPENSSH PRIVATE KEY-----" | ssh-add -
+	echo -e "-----BEGIN OPENSSH PRIVATE KEY-----\n${LIFERAY_LEARN_ETC_CRON_IMPORTER_GITHUB_DEPLOY_KEY}\n-----END OPENSSH PRIVATE KEY-----" | ssh-add -
 
 	export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new -q"
 
-	rm -fr "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}"
+	rm -fr "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}"
 
-	git clone --branch "${LIFERAY_LEARN_ETC_CRON_GITHUB_BRANCH:-master}" --depth 1 --single-branch "git@github.com:${LIFERAY_LEARN_ETC_CRON_GITHUB_USER:-liferay}/liferay-learn.git" "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}"
+	git clone --branch "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GITHUB_BRANCH:-master}" --depth 1 --single-branch "git@github.com:${LIFERAY_LEARN_ETC_CRON_IMPORTER_GITHUB_USER:-liferay}/liferay-learn.git" "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}"
 
-	git -C "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}" log -1 --pretty="Cloned at commit: %H %aN %s"
+	git -C "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}" log -1 --pretty="Cloned at commit: %H %aN %s"
 }
 
 function copy_resources {
@@ -38,28 +141,30 @@ function copy_resources {
 
 	local delete_flag="--delete"
 
-	if [ "${LIFERAY_LEARN_ETC_CRON_PARTIAL:-}" = "true" ]
+	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_PARTIAL:-}" = "true" ]
 	then
 		echo "[cron-importer] Partial mode: rsync without --delete."
 
 		delete_flag=""
 	fi
 
-	rsync --include="*.zip" --include="*/" --exclude="*" --inplace --prune-empty-dirs --recursive --whole-file "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/" /public_html
+	rsync --include="*.zip" --include="*/" --exclude="*" --inplace --prune-empty-dirs --recursive --whole-file "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/site/" /public_html
 
-	rsync ${delete_flag} --inplace --prune-empty-dirs --recursive --whole-file "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/examples" /public_html
+	rsync ${delete_flag} --inplace --prune-empty-dirs --recursive --whole-file "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/site/examples" /public_html
 
-	copy_tree_sharded "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/images" /public_html/images "${delete_flag}"
+	copy_tree_sharded "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/site/images" /public_html/images "${delete_flag}"
 
 	if [ -z "${_SKIP_REFERENCE_COPY}" ]
 	then
-		copy_tree_sharded "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site/reference" /public_html/reference "${delete_flag}"
+		copy_tree_sharded "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/site/reference" /public_html/reference "${delete_flag}"
 
 		if [ -n "${_REFERENCE_FINGERPRINT}" ]
 		then
+			cp "${_APPS_MARKDOWN_FILE_NAME}" /public_html/.learn-importer-apps-md
+
 			echo "${_REFERENCE_FINGERPRINT}" > /public_html/.learn-importer-reference-marker
 
-			echo "[cron-importer] Reference marker updated."
+			echo "[cron-importer] Reference marker and apps.md cache updated."
 		fi
 	fi
 }
@@ -112,12 +217,12 @@ function check_reference_cache {
 	_REFERENCE_FINGERPRINT=""
 	_SKIP_REFERENCE_COPY=""
 
-	if [ "${LIFERAY_LEARN_ETC_CRON_PARTIAL:-}" = "true" ]
+	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_PARTIAL:-}" = "true" ]
 	then
 		return 0
 	fi
 
-	local common_file="${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/_common.sh"
+	local common_file="${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/_common.sh"
 
 	local doc_file_name release
 
@@ -144,7 +249,7 @@ function check_reference_cache {
 
 	_REFERENCE_FINGERPRINT="${doc_file_name}|${total_size}"
 
-	if [ "${LIFERAY_LEARN_ETC_CRON_FORCE_REFERENCE:-}" = "true" ]
+	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_FORCE_REFERENCE:-}" = "true" ]
 	then
 		echo "[cron-importer] Reference cache: forced refresh requested, ignoring the marker."
 
@@ -153,6 +258,13 @@ function check_reference_cache {
 
 	if [ -f /public_html/.learn-importer-reference-marker ] && [ "$(cat /public_html/.learn-importer-reference-marker)" = "${_REFERENCE_FINGERPRINT}" ]
 	then
+		if [ ! -f /public_html/.learn-importer-apps-md ]
+		then
+			echo "[cron-importer] Reference cache: apps.md not cached yet, forcing a full refresh."
+
+			return 0
+		fi
+
 		echo "[cron-importer] Reference cache HIT (${_REFERENCE_FINGERPRINT}): skipping javadoc download, extraction and copy."
 
 		_SKIP_REFERENCE_COPY="true"
@@ -166,9 +278,22 @@ function check_reference_cache {
 function generate_docs {
 	echo "[cron-importer] Phase: generate docs"
 
+	export LIFERAY_LEARN_SKIP_LOCALES="${LIFERAY_LEARN_ETC_CRON_IMPORTER_SKIP_LOCALES_CONTENT:-}"
+
+	echo "[cron-importer] Locales excluded from conversion: ${LIFERAY_LEARN_SKIP_LOCALES}"
+
+	if [ -n "${_SKIP_REFERENCE_COPY}" ]
+	then
+		mkdir --parents "$(dirname "${_APPS_MARKDOWN_FILE_NAME}")"
+
+		cp /public_html/.learn-importer-apps-md "${_APPS_MARKDOWN_FILE_NAME}"
+
+		echo "[cron-importer] Restored apps.md from the reference cache."
+	fi
+
 	_GENERATION_START_MARKER=$(mktemp)
 
-	pushd "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}"
+	pushd "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}"
 
 	./generate_docs.sh
 
@@ -178,7 +303,11 @@ function generate_docs {
 }
 
 function main {
+	check_environment
+
 	clone_repository
+
+	run_preflight
 
 	check_reference_cache
 
@@ -186,7 +315,7 @@ function main {
 
 	copy_resources
 
-	if [ "${LIFERAY_LEARN_ETC_CRON_PARTIAL:-}" != "true" ]
+	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_PARTIAL:-}" != "true" ]
 	then
 		write_manifest
 	else
@@ -198,16 +327,24 @@ function main {
 	echo "[cron-importer] Setup completed, handing over to the importer."
 }
 
+function run_preflight {
+	echo "[cron-importer] Phase: preflight (DXP and content)"
+
+	local java_options=(${LIFERAY_JAR_RUNNER_JAVA_OPTS:-})
+
+	java "${java_options[@]}" -jar /opt/liferay/jar-runner.jar --preflight
+}
+
 function write_manifest {
 	echo "[cron-importer] Phase: write manifest"
 
 	local commit
 
-	commit=$(git -C "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}" rev-parse HEAD)
+	commit=$(git -C "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}" rev-parse HEAD)
 
 	local zips_json
 
-	zips_json=$(cd "${LIFERAY_LEARN_ETC_CRON_GIT_REPOSITORY_DIR}/site" && find . -name "*.zip" -type f | sed "s|^\./||" | sort | awk '{printf "%s\"%s\"", separator, $0; separator = ", "}')
+	zips_json=$(cd "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}/site" && find . -name "*.zip" -type f | sed "s|^\./||" | sort | awk '{printf "%s\"%s\"", separator, $0; separator = ", "}')
 
 	cat > /public_html/.learn-importer-manifest.json <<EOF
 {
