@@ -23,6 +23,7 @@ import com.liferay.headless.delivery.client.pagination.Pagination;
 import com.liferay.headless.delivery.client.permission.Permission;
 import com.liferay.headless.delivery.client.resource.v1_0.StructuredContentFolderResource;
 import com.liferay.headless.delivery.client.resource.v1_0.StructuredContentResource;
+import com.liferay.petra.string.CharPool;
 import com.liferay.petra.string.StringBundler;
 import com.liferay.petra.string.StringPool;
 import com.liferay.portal.kernel.util.GetterUtil;
@@ -448,6 +449,9 @@ public class Main {
 				siteStructuredContent.getId(), siteStructuredContent);
 		}
 
+		Set<String> divergentExternalReferenceCodes = _verify(
+			externalReferenceCodeStructuredContents);
+
 		for (String fileName : _fileNames) {
 			if (!fileName.contains("/en/") || !fileName.endsWith(".md")) {
 				continue;
@@ -496,6 +500,8 @@ public class Main {
 					if (StringUtil.equals(
 							_getHTMLMD5Hex(new File(fileName)),
 							_getMD5Hex(siteStructuredContent)) &&
+						!divergentExternalReferenceCodes.contains(
+							structuredContent.getExternalReferenceCode()) &&
 						!_skipDiffCheck) {
 
 						System.out.println(
@@ -713,6 +719,42 @@ public class Main {
 		_fileNames.add(fileName);
 	}
 
+	private void _describeDivergence(
+		StructuredContent structuredContent, String html) {
+
+		String content = _getContent(structuredContent);
+
+		int index = 0;
+
+		while ((index < content.length()) && (index < html.length()) &&
+			   (content.charAt(index) == html.charAt(index))) {
+
+			index++;
+		}
+
+		System.out.println(
+			StringBundler.concat(
+				"First divergence in ", structuredContent.getFriendlyUrlPath(),
+				": the published content is ", content.length(),
+				" characters, the generated HTML is ", html.length(),
+				", they differ from character ", index));
+
+		String publishedExcerpt = StringUtil.replace(
+			content.substring(
+				Math.max(0, index - 60),
+				Math.min(content.length(), index + 60)),
+			CharPool.NEW_LINE, "\\n");
+
+		System.out.println("Published: " + publishedExcerpt);
+
+		String generatedExcerpt = StringUtil.replace(
+			html.substring(
+				Math.max(0, index - 60), Math.min(html.length(), index + 60)),
+			CharPool.NEW_LINE, "\\n");
+
+		System.out.println("Generated: " + generatedExcerpt);
+	}
+
 	private void _error(String errorMessage) {
 		System.out.println(errorMessage);
 
@@ -816,6 +858,23 @@ public class Main {
 		return childrenJSONArray;
 	}
 
+	private String _getContent(StructuredContent structuredContent) {
+		ContentField[] contentFields = structuredContent.getContentFields();
+
+		for (ContentField contentField : contentFields) {
+			if (!StringUtil.equals(contentField.getName(), "content")) {
+				continue;
+			}
+
+			ContentFieldValue contentFieldValue =
+				contentField.getContentFieldValue();
+
+			return contentFieldValue.getData();
+		}
+
+		return StringPool.BLANK;
+	}
+
 	private String _getDescription(String text) {
 		TextCollectingVisitor textCollectingVisitor =
 			new TextCollectingVisitor();
@@ -844,6 +903,21 @@ public class Main {
 		}
 
 		return dirNames.toArray(new String[0]);
+	}
+
+	private int _getDivergenceThreshold(int publishedCount) {
+		int percentage = GetterUtil.getInteger(
+			System.getenv(
+				"LIFERAY_LEARN_ETC_CRON_IMPORTER_VERIFY_THRESHOLD_PERCENTAGE"),
+			5);
+
+		int threshold = (publishedCount * percentage) / 100;
+
+		if (threshold < 5) {
+			return 5;
+		}
+
+		return threshold;
 	}
 
 	private String _getHTML(File file) throws Exception {
@@ -1688,6 +1762,14 @@ public class Main {
 		}
 	}
 
+	private String _normalizeHTML(String html) {
+		Matcher matcher = _lineTrailingWhitespacePattern.matcher(html);
+
+		String normalizedHTML = matcher.replaceAll(StringPool.BLANK);
+
+		return normalizedHTML.stripTrailing();
+	}
+
 	private String _toFriendlyURLPath(File file) {
 		String filePathString = file.getPath();
 
@@ -1911,6 +1993,150 @@ public class Main {
 		return structuredContent;
 	}
 
+	private String _unescape(String text) {
+		StringBuilder sb = new StringBuilder(text.length());
+
+		int index = 0;
+
+		while (index < text.length()) {
+			char c = text.charAt(index);
+
+			if ((c != CharPool.BACK_SLASH) || ((index + 1) >= text.length())) {
+				sb.append(c);
+
+				index++;
+
+				continue;
+			}
+
+			char nextChar = text.charAt(index + 1);
+
+			if (nextChar == CharPool.BACK_SLASH) {
+				sb.append(CharPool.BACK_SLASH);
+
+				index += 2;
+
+				continue;
+			}
+
+			if ((nextChar == 'u') && ((index + 6) <= text.length()) &&
+				_unicodeEscapePattern.matcher(
+					text.substring(index, index + 6)
+				).matches()) {
+
+				sb.append(
+					(char)Integer.parseInt(
+						text.substring(index + 2, index + 6), 16));
+
+				index += 6;
+
+				continue;
+			}
+
+			sb.append(c);
+
+			index++;
+		}
+
+		return sb.toString();
+	}
+
+	private Set<String> _verify(
+			Map<String, StructuredContent>
+				externalReferenceCodeStructuredContents)
+		throws Exception {
+
+		Set<String> divergentExternalReferenceCodes = new TreeSet<>();
+
+		List<String> divergentFriendlyUrlPaths = new ArrayList<>();
+		int publishedCount = 0;
+
+		for (String fileName : _fileNames) {
+			if (!fileName.contains("/en/") || !fileName.endsWith(".md")) {
+				continue;
+			}
+
+			File file = new File(fileName);
+
+			String uuid = _getUuid(
+				FileUtils.readFileToString(file, StandardCharsets.UTF_8));
+
+			StructuredContent siteStructuredContent =
+				externalReferenceCodeStructuredContents.get(uuid);
+
+			if (siteStructuredContent == null) {
+				continue;
+			}
+
+			publishedCount++;
+
+			if (!StringUtil.equals(
+					_getHTMLMD5Hex(file), _getMD5Hex(siteStructuredContent))) {
+
+				continue;
+			}
+
+			String html = FileUtils.readFileToString(
+				_getHTMLFile(file), StandardCharsets.UTF_8);
+
+			if (StringUtil.equals(
+					_normalizeHTML(
+						_unescape(_getContent(siteStructuredContent))),
+					_normalizeHTML(html))) {
+
+				continue;
+			}
+
+			if (divergentExternalReferenceCodes.isEmpty()) {
+				_describeDivergence(siteStructuredContent, html);
+			}
+
+			divergentExternalReferenceCodes.add(uuid);
+			divergentFriendlyUrlPaths.add(
+				siteStructuredContent.getFriendlyUrlPath());
+		}
+
+		if (divergentExternalReferenceCodes.isEmpty()) {
+			System.out.println(
+				StringBundler.concat(
+					"Verified ", publishedCount,
+					" published structured contents against the repository: ",
+					"none diverged."));
+
+			return divergentExternalReferenceCodes;
+		}
+
+		int threshold = _getDivergenceThreshold(publishedCount);
+
+		if (divergentExternalReferenceCodes.size() > threshold) {
+			_error(
+				StringBundler.concat(
+					"Verification aborted: ",
+					divergentExternalReferenceCodes.size(), " of ",
+					publishedCount,
+					" published structured contents diverge from the ",
+					"repository, above the threshold of ", threshold,
+					". Nothing was realigned: such a number points at the ",
+					"comparison itself rather than at manual edits."));
+
+			return Collections.emptySet();
+		}
+
+		System.out.println(
+			StringBundler.concat(
+				"Verification found ", divergentExternalReferenceCodes.size(),
+				" of ", publishedCount,
+				" published structured contents diverging from the ",
+				"repository, realigning them:"));
+
+		for (String divergentFriendlyUrlPath : divergentFriendlyUrlPaths) {
+			System.out.println(
+				"Diverged from the repository: " + divergentFriendlyUrlPath);
+		}
+
+		return divergentExternalReferenceCodes;
+	}
+
 	private void _warn(String warningMessage) {
 		System.out.println(warningMessage);
 
@@ -1931,8 +2157,12 @@ public class Main {
 		FileUtils.writeStringToFile(file, content, StandardCharsets.UTF_8);
 	}
 
+	private static final Pattern _lineTrailingWhitespacePattern =
+		Pattern.compile("[ \\t]+(?=\\n)");
 	private static final Pattern _markdownLinkPattern = Pattern.compile(
 		"\\[(.*)\\]\\((.*)\\)");
+	private static final Pattern _unicodeEscapePattern = Pattern.compile(
+		"\\\\u([0-9a-fA-F]{4})");
 
 	private final String _baseDirName;
 	private DataDefinitionResource _dataDefinitionResource;
