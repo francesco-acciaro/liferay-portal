@@ -5,7 +5,7 @@ set -euo pipefail
 _APPS_MARKDOWN_FILE_NAME="${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR:-}/docs/reference/latest/en/dxp/apps.md"
 
 function check_environment {
-	echo "[cron-importer] Phase: preflight (environment)"
+	record_phase "preflight"
 
 	local missing_names=()
 
@@ -205,7 +205,7 @@ function check_reference_cache {
 }
 
 function clone_repository {
-	echo "[cron-importer] Phase: clone"
+	record_phase "clone"
 
 	eval "$(ssh-agent -s)"
 
@@ -227,10 +227,12 @@ function clone_repository {
 		log \
 		--max-count=1 \
 		--pretty="Cloned at commit: %H %aN %s"
+
+	echo "commit $(git -C "${LIFERAY_LEARN_ETC_CRON_IMPORTER_GIT_REPOSITORY_DIR}" rev-parse --short=8 HEAD)" >> /tmp/liferay_learn_run_phases
 }
 
 function copy_resources {
-	echo "[cron-importer] Phase: copy resources"
+	record_phase "copy"
 
 	local delete_flag="--delete"
 
@@ -307,7 +309,7 @@ function copy_tree_sharded {
 }
 
 function generate_docs {
-	echo "[cron-importer] Phase: generate docs"
+	record_phase "generation"
 
 	export LIFERAY_LEARN_SKIP_LOCALES=${LIFERAY_LEARN_ETC_CRON_IMPORTER_SKIP_LOCALES_CONTENT:-}
 
@@ -333,7 +335,17 @@ function generate_docs {
 	check_generated_site
 }
 
+function log_url {
+	echo "https://console.${LCP_INFRASTRUCTURE_DOMAIN:-}/projects/${LCP_PROJECT_ID:-}/logs?instanceId=${HOSTNAME:-}&logServiceId=${LCP_SERVICE_ID:-}"
+}
+
 function main {
+	exec > >(tee /tmp/liferay_learn_run.log) 2>&1
+
+	rm --force /tmp/liferay_learn_run_phases
+
+	notify_slack ":rocket: *liferay-learn-etc-cron-importer* run started\\nBranch: ${LIFERAY_LEARN_ETC_CRON_IMPORTER_GITHUB_BRANCH:-master} · <$(log_url)|console log>"
+
 	check_environment
 
 	clone_repository
@@ -344,6 +356,8 @@ function main {
 
 	generate_docs
 
+	notify_sources_ready
+
 	copy_resources
 
 	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_PARTIAL:-}" != "true" ]
@@ -353,21 +367,155 @@ function main {
 		echo "[cron-importer] Partial mode: manifest not written (it only describes full runs)."
 	fi
 
+	notify_resources_published
+
+	echo "phase import $(date +%s)" >> /tmp/liferay_learn_run_phases
+
 	touch /tmp/liferay_jar_runner_set_up_ok
 
 	echo "[cron-importer] Setup completed, handing over to the importer."
 }
 
+function notify_resources_published {
+	local detail
+
+	detail="copy $(span copy now)"
+
+	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_PARTIAL:-}" != "true" ]
+	then
+		detail="copy $(span copy manifest) · manifest $(span manifest now)"
+	fi
+
+	notify_slack ":truck: *Resources published* · $(span copy now)\\n${detail}"
+}
+
+function notify_slack {
+	local text=${1}
+
+	if [ -z "${LIFERAY_LEARN_ETC_CRON_IMPORTER_SLACK_ENDPOINT:-}" ]
+	then
+		return 0
+	fi
+
+	local payload_file
+
+	payload_file=$(mktemp)
+
+	printf '{"channel":"%s","icon_emoji":":robot_face:","text":"%s","username":"learn-importer"}' \
+		"${LIFERAY_LEARN_ETC_CRON_IMPORTER_SLACK_CHANNEL:-}" \
+		"${text}" > "${payload_file}"
+
+	curl \
+		--data "@${payload_file}" \
+		--header "Content-Type: application/json" \
+		--max-time 30 \
+		--silent \
+		"${LIFERAY_LEARN_ETC_CRON_IMPORTER_SLACK_ENDPOINT}" > /dev/null || true
+
+	rm --force "${payload_file}"
+}
+
+function notify_sources_ready {
+	local commit
+
+	commit=$(source_commit)
+
+	local source_link="unknown"
+
+	if [ -n "${commit}" ]
+	then
+		source_link="<https://github.com/${LIFERAY_LEARN_ETC_CRON_IMPORTER_GITHUB_USER:-liferay}/liferay-learn/commit/${commit}|${commit}>"
+	fi
+
+	notify_slack ":hammer: *Sources ready* · $(span preflight now)\\nSource: ${source_link} · clone $(span clone preflight-dxp) · preflight-dxp $(span preflight-dxp generation) · generation $(span generation now)"
+}
+
+function phase_seconds {
+	local name=${1}
+
+	if [ ! -f /tmp/liferay_learn_run_phases ]
+	then
+		return 0
+	fi
+
+	grep "^phase ${name} " /tmp/liferay_learn_run_phases | tail --lines=1 | awk '{print $3}' || true
+}
+
+function record_phase {
+	local name="${1}"
+
+	echo "[cron-importer] Phase: ${name}"
+
+	echo "phase ${name} $(date +%s)" >> /tmp/liferay_learn_run_phases
+}
+
 function run_preflight {
-	echo "[cron-importer] Phase: preflight (DXP and content)"
+	record_phase "preflight-dxp"
 
 	local java_options=(${LIFERAY_JAR_RUNNER_JAVA_OPTS:-})
 
 	java "${java_options[@]}" -jar /opt/liferay/jar-runner.jar --preflight
 }
 
+function source_commit {
+	if [ ! -f /tmp/liferay_learn_run_phases ]
+	then
+		return 0
+	fi
+
+	grep "^commit " /tmp/liferay_learn_run_phases | tail --lines=1 | awk '{print $2}' || true
+}
+
+function span {
+	local seconds
+
+	seconds=$(span_seconds "${1}" "${2}")
+
+	if [ -z "${seconds}" ]
+	then
+		printf "n/a"
+
+		return 0
+	fi
+
+	to_duration "${seconds}"
+}
+
+function span_seconds {
+	local from_name=${1} to_name=${2}
+
+	local from_seconds to_seconds
+
+	from_seconds=$(phase_seconds "${from_name}")
+
+	if [ "${to_name}" = "now" ]
+	then
+		to_seconds=$(date +%s)
+	else
+		to_seconds=$(phase_seconds "${to_name}")
+	fi
+
+	if [ -z "${from_seconds}" ] || [ -z "${to_seconds}" ]
+	then
+		return 0
+	fi
+
+	echo "$((to_seconds - from_seconds))"
+}
+
+function to_duration {
+	local seconds=${1}
+
+	if [ "${seconds}" -lt 60 ]
+	then
+		printf "%ds" "${seconds}"
+	else
+		printf "%dm%ds" "$((seconds / 60))" "$((seconds % 60))"
+	fi
+}
+
 function write_manifest {
-	echo "[cron-importer] Phase: write manifest"
+	record_phase "manifest"
 
 	local commit
 
