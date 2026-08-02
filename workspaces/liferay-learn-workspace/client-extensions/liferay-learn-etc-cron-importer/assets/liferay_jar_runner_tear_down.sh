@@ -1,5 +1,19 @@
 #!/bin/bash
 
+function log_tail {
+	if [ ! -f /tmp/liferay_learn_run.log ]
+	then
+		return 0
+	fi
+
+	tail --lines=25 /tmp/liferay_learn_run.log | \
+		sed \
+			--expression 's/\\/\\\\/g' \
+			--expression 's/"/\\"/g' \
+			--expression 's/\t/    /g' | \
+		awk '{printf "%s\\n", $0}'
+}
+
 function main {
 	if [ -f /tmp/liferay_jar_runner_main_ok ]
 	then
@@ -34,6 +48,15 @@ function notify_slack {
 	fi
 
 	local text=":rotating_light: *liferay-learn-etc-cron-importer* run failed before the importer could report. Last phase reached: ${last_phase}."
+
+	local tail_lines
+
+	tail_lines=$(log_tail)
+
+	if [ -n "${tail_lines}" ]
+	then
+		text="${text}\\n\\nLast lines of the run:\\n\`\`\`\\n${tail_lines}\`\`\`"
+	fi
 
 	local log_url="https://console.${LCP_INFRASTRUCTURE_DOMAIN:-}/projects/${LCP_PROJECT_ID:-}/logs?instanceId=${HOSTNAME:-}&logServiceId=${LCP_SERVICE_ID:-}"
 
