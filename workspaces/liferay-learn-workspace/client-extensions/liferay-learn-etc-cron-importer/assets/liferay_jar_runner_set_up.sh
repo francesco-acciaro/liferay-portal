@@ -178,7 +178,7 @@ function check_reference_cache {
 
 	_REFERENCE_FINGERPRINT="${doc_file_name}|${total_size}"
 
-	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_FORCE_REFERENCE:-}" = "true" ]
+	if [ "${LIFERAY_LEARN_ETC_CRON_IMPORTER_FORCE_REFERENCE_DOCS:-}" = "true" ]
 	then
 		echo "[cron-importer] Reference cache: forced refresh requested, ignoring the marker."
 
