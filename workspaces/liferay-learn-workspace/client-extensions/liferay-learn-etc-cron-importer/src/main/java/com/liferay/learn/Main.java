@@ -581,6 +581,10 @@ public class Main {
 					publishedStructuredContentId =
 						importedStructuredContent.getId();
 
+					importedStructuredContent =
+						_structuredContentResource.putStructuredContent(
+							publishedStructuredContentId, structuredContent);
+
 					addedStructuredContentCount++;
 				}
 
