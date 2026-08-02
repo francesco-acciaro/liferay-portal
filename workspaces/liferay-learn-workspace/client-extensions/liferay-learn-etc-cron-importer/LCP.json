@@ -1,4 +1,5 @@
 {
+	"backoffLimit": 0,
 	"concurrencyPolicy": "Forbid",
 	"cpu": 2,
 	"env": {
