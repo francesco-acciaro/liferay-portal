@@ -38,7 +38,7 @@
 	"kind": "CronJob",
 	"memory": 3000,
 	"scale": 1,
-	"schedule": "16 11 * * *",
+	"schedule": "0 6 * * *",
 	"volumes": {
 		"publicHtml": "/public_html"
 	}
