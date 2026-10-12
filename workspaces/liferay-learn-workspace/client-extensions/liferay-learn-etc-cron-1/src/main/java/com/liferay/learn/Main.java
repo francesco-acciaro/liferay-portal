@@ -58,6 +58,8 @@ import com.vladsch.flexmark.util.data.MutableDataSet;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 import java.net.URL;
 
@@ -495,7 +497,7 @@ public class Main {
 				}
 			}
 			catch (Exception exception) {
-				_error(fileName + ": " + exception.getMessage());
+				_error(fileName, exception);
 			}
 		}
 
@@ -588,7 +590,7 @@ public class Main {
 			}
 		}
 		catch (Exception exception) {
-			_error(exception.getMessage());
+			_error("Unable to delete RAG document " + id, exception);
 		}
 	}
 
@@ -596,6 +598,16 @@ public class Main {
 		System.out.println(errorMessage);
 
 		_errorMessages.add(errorMessage);
+	}
+
+	private void _error(String errorMessage, Throwable throwable) {
+		StringWriter stringWriter = new StringWriter();
+
+		throwable.printStackTrace(new PrintWriter(stringWriter));
+
+		_error(
+			StringBundler.concat(
+				errorMessage, ": ", stringWriter.toString()));
 	}
 
 	private JSONArray _getBreadcrumbJSONArray(File file) throws Exception {
@@ -1139,7 +1151,9 @@ public class Main {
 					"OFFICIAL_DOCUMENTATION"));
 		}
 		catch (Exception exception) {
-			_error(exception.getMessage());
+			_error(
+				"Unable to add OFFICIAL_DOCUMENTATION taxonomy category",
+				exception);
 		}
 
 		for (Object taxonomyCategoryNameObject :
@@ -1559,7 +1573,9 @@ public class Main {
 			}
 		}
 		catch (Exception exception) {
-			_error(exception.getMessage());
+			_error(
+				"Unable to update RAG document " + structuredContent.getId(),
+				exception);
 		}
 	}
 
